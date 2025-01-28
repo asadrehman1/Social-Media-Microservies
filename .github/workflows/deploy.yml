@@ -1,0 +1,73 @@
+name: CI/CD Pipeline for Microservices App on AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+      - name: Build and push Docker images
+        run: |
+          # For each service, you will build and push its image to ECR
+          for service in api-gateway identity-service post-service media-service search-service; do
+            docker build -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$service ./services/$service
+            docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$service
+          done
+
+  deploy_to_ecs:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update ECS service with new images
+        run: |
+          # Get the current ECS task definition
+          ecs_task_definition=$(aws ecs describe-task-definition --task-definition ecs-task-definition-name)
+          
+          # For each service, update the container image in the task definition
+          for service in api-gateway identity-service post-service media-service search-service; do
+            # Replace the image URL in the task definition with the new image URL for each service
+            new_task_definition=$(echo $ecs_task_definition | jq --arg service "${service}" '.taskDefinition | .containerDefinitions[] | select(.name == $service) | .image = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$service:latest"')
+          done
+
+          # Register the updated task definition
+          aws ecs register-task-definition \
+            --family ecs-task-definition-name \
+            --network-mode awsvpc \
+            --container-definitions "$new_task_definition"
+          
+          # Update ECS services with the new task definition
+          for service in api-gateway identity-service post-service media-service search-service; do
+            aws ecs update-service \
+              --cluster ecs-cluster-name \
+              --service $service \
+              --task-definition ecs-task-definition-name
+          done

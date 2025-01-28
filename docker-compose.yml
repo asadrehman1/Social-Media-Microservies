@@ -2,84 +2,81 @@ version: '3.8'
 
 services:
   api-gateway:
-    build: ./api-gateway
+    image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/api-gateway:latest"
+    container_name: api-gateway
     ports:
       - "3000:3000"
-    env_file: ./api-gateway/.env
+    environment:
+      - REDIS_URL=redis://localhost:6379
+      - RABBITMQ_URL=amqp://localhost:5672
     depends_on:
       - redis
       - rabbitmq
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - mongo
 
   identity-service:
-    build: ./identity-service
-    env_file: ./identity-service/.env
-    depends_on:
-      - redis
-      - rabbitmq
+    image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/identity-service:latest"
+    container_name: identity-service
+    ports:
+      - "3001:3001"
     environment:
-      - REDIS_URL=redis://redis:6379
-      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://localhost:6379
+      - MONGODB_URL=mongodb://mongo:27017
+    depends_on:
+      - mongo
+      - redis
 
   post-service:
-    build: ./post-service
-    env_file: ./post-service/.env
+    image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/post-service:latest"
+    container_name: post-service
+    ports:
+      - "3002:3002"
+    environment:
+      - REDIS_URL=redis://localhost:6379
+      - RABBITMQ_URL=amqp://localhost:5672
     depends_on:
       - redis
       - rabbitmq
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - RABBITMQ_URL=amqp://rabbitmq:5672
 
   media-service:
-    build: ./media-service
-    env_file: ./media-service/.env
+    image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/media-service:latest"
+    container_name: post-service
+    ports:
+      - "3003:3003"
+    environment:
+      - REDIS_URL=redis://localhost:6379
+      - RABBITMQ_URL=amqp://localhost:5672
     depends_on:
       - redis
       - rabbitmq
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - RABBITMQ_URL=amqp://rabbitmq:5672
 
   search-service:
-    build: ./search-service
-    env_file: ./search-service/.env
+    image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/search-service:latest"
+    container_name: post-service
+    ports:
+      - "3004:3004"
+    environment:
+      - REDIS_URL=redis://localhost:6379
+      - RABBITMQ_URL=amqp://localhost:5672
     depends_on:
       - redis
       - rabbitmq
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - RABBITMQ_URL=amqp://rabbitmq:5672
 
   redis:
-    image: redis:alpine
+    image: "redis:latest"
+    container_name: redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis-data:/data
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: "rabbitmq:management"
+    container_name: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
 
   mongo:
-    image: mongo:latest
+    image: "mongo:latest"
+    container_name: mongo
     ports:
       - "27017:27017"
-    volumes:
-      - mongo-data:/data/db 
-volumes:
-  redis-data:
-  rabbitmq-data:
-  mongo-data:
